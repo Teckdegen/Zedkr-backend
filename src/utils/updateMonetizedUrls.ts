@@ -19,8 +19,13 @@ export async function updateMonetizedUrls() {
       return;
     }
 
+    // Add timeout to prevent hanging
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Supabase query timeout')), 10000); // 10 second timeout
+    });
+
     // Get all endpoints that don't have monetized_url set
-    const { data: endpoints, error: fetchError } = await supabase
+    const queryPromise = supabase
       .from('endpoints')
       .select(`
         id,
@@ -36,13 +41,23 @@ export async function updateMonetizedUrls() {
       .is('monetized_url', null)
       .eq('active', true);
 
+    const { data: endpoints, error: fetchError } = await Promise.race([
+      queryPromise,
+      timeoutPromise,
+    ]) as any;
+
     if (fetchError) {
-      console.error('Error fetching endpoints:', {
-        message: fetchError.message,
-        details: fetchError.details,
-        hint: fetchError.hint,
-        code: fetchError.code,
-      });
+      // Don't log full error details if it's a network issue - just warn
+      if (fetchError.message?.includes('fetch failed') || fetchError.code === 'ENOTFOUND' || fetchError.code === 'ECONNREFUSED') {
+        console.warn('⚠️  Could not connect to Supabase to update monetized URLs (network issue)');
+      } else {
+        console.error('Error fetching endpoints:', {
+          message: fetchError.message,
+          details: fetchError.details,
+          hint: fetchError.hint,
+          code: fetchError.code,
+        });
+      }
       return;
     }
 
@@ -74,15 +89,17 @@ export async function updateMonetizedUrls() {
       }
     }
   } catch (error: any) {
-    // Handle network/fetch errors gracefully
-    if (error?.message?.includes('fetch failed') || error?.code === 'ENOTFOUND' || error?.code === 'ECONNREFUSED') {
-      console.warn('⚠️  Network error updating monetized URLs (Supabase may be unreachable):', error.message);
+    // Handle network/fetch errors gracefully - don't crash the server
+    if (error?.message?.includes('fetch failed') || 
+        error?.message?.includes('timeout') ||
+        error?.code === 'ENOTFOUND' || 
+        error?.code === 'ECONNREFUSED' ||
+        error?.message?.includes('Supabase query timeout')) {
+      console.warn('⚠️  Could not update monetized URLs (Supabase connection issue - non-critical)');
     } else {
-      console.error('Error in updateMonetizedUrls:', {
-        message: error?.message || 'Unknown error',
-        stack: error?.stack,
-      });
+      console.warn('⚠️  Error updating monetized URLs (non-critical):', error?.message || 'Unknown error');
     }
+    // Silently return - this is a background task that shouldn't block server startup
   }
 }
 

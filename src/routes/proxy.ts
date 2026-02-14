@@ -66,6 +66,9 @@ router.all('/:username/:apiName/*', async (req, res, next) => {
     const network = (process.env.NETWORK || 'testnet') as 'mainnet' | 'testnet';
     const facilitatorUrl = process.env.FACILITATOR_URL || 'https://facilitator.stacksx402.com';
 
+    // Convert microSTX to STX for human-readable display
+    const priceSTX = (parseInt(endpoint.price_microstx) / 1000000).toFixed(6).replace(/\.?0+$/, '');
+
     // Create payment middleware instance
     // Include description for better x402scan compatibility
     const paymentMw = paymentMiddleware({
@@ -75,6 +78,19 @@ router.all('/:username/:apiName/*', async (req, res, next) => {
       facilitatorUrl: facilitatorUrl,
       description: `${endpoint.endpoint_name || 'API endpoint'} - ${endpoint.apis?.api_name || 'ZedKr API'}`,
     });
+
+    // Wrap the response to add human-readable STX amount to 402 responses
+    const originalJson = res.json.bind(res);
+    res.json = function(body: any) {
+      // If this is a 402 response, add amountSTX field to each accepts entry
+      if (res.statusCode === 402 && body && body.accepts && Array.isArray(body.accepts)) {
+        body.accepts = body.accepts.map((accept: any) => ({
+          ...accept,
+          amountSTX: priceSTX, // Add human-readable STX amount
+        }));
+      }
+      return originalJson(body);
+    };
 
     // Execute payment middleware, then proxy
     paymentMw(req, res, () => {

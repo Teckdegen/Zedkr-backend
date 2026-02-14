@@ -85,12 +85,16 @@ router.get('/x402/:username/:apiName/:endpointPath', async (req, res) => {
       x402Schema.image = endpoint.apis.image_url;
     }
 
+    // Convert microSTX to STX for human-readable display
+    const priceSTX = (parseInt(endpoint.price_microstx) / 1000000).toFixed(6).replace(/\.?0+$/, '');
+
     // Add accepts array with x402 v2 format
     x402Schema.accepts = [
       {
         scheme: 'exact',
         network: networkCAIP2,
-        amount: endpoint.price_microstx.toString(),
+        amount: endpoint.price_microstx.toString(), // Protocol requires microSTX
+        amountSTX: priceSTX, // Human-readable STX amount
         asset: 'STX',
         payTo: developerWallet,
         maxTimeoutSeconds: 300,

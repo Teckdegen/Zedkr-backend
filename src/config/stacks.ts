@@ -1,11 +1,11 @@
-import { STACKS_TESTNET, STACKS_MAINNET } from '@stacks/network';
+import { StacksTestnet, StacksMainnet } from '@stacks/network';
 import 'dotenv/config';
 
 const network = (process.env.NETWORK || 'testnet').toLowerCase();
 
 export const stacksNetwork = network === 'mainnet' 
-  ? STACKS_MAINNET 
-  : STACKS_TESTNET;
+  ? new StacksMainnet() 
+  : new StacksTestnet();
 
 export const isTestnet = network === 'testnet';
 

@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase.js';
-import { verifyMessageSignatureRsv } from '@stacks/transactions';
 import { networkConfig } from '../config/stacks.js';
 
 export interface AuthenticatedRequest extends Request {

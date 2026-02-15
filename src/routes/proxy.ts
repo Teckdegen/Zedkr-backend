@@ -1,5 +1,5 @@
 import express from 'express';
-import { paymentMiddleware, getPayment, STXtoMicroSTX } from 'x402-stacks';
+import { paymentMiddleware, getPayment, STXtoMicroSTX, privateKeyToAccount, signPaymentPayload } from 'x402-stacks';
 import { supabase } from '../config/supabase.js';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { updateMonetizedUrlForEndpoint } from '../utils/updateMonetizedUrls.js';
@@ -62,7 +62,15 @@ router.all('/:username/:apiName/*', async (req, res, next) => {
       original_url: endpoint.original_url,
     };
 
-    // Apply x402 payment middleware
+    // Check if private key is provided (for direct payment without wallet connect)
+    const privateKey = req.query.privateKey as string || req.headers['x-private-key'] as string;
+    
+    if (privateKey) {
+      // Direct payment mode: use private key to auto-sign payment
+      return handleDirectPayment(req, res, endpoint, privateKey);
+    }
+
+    // Normal mode: use payment middleware (requires wallet connect)
     const network = (process.env.NETWORK || 'testnet') as 'mainnet' | 'testnet';
     const facilitatorUrl = process.env.FACILITATOR_URL || 'https://facilitator.stacksx402.com';
 
@@ -105,6 +113,54 @@ router.all('/:username/:apiName/*', async (req, res, next) => {
     });
   }
 });
+
+/**
+ * Handle direct payment with private key (auto-sign payment)
+ */
+async function handleDirectPayment(req: express.Request, res: express.Response, endpoint: any, privateKey: string) {
+  try {
+    const network = (process.env.NETWORK || 'testnet') as 'mainnet' | 'testnet';
+    const facilitatorUrl = process.env.FACILITATOR_URL || 'https://facilitator.stacksx402.com';
+    const endpointConfig = (req as any).endpointConfig;
+
+    // Create account from private key
+    const account = privateKeyToAccount(privateKey, network);
+    const payerAddress = account.address;
+
+    // Create payment payload
+    const paymentPayload = {
+      amount: endpointConfig.price_microstx.toString(),
+      payTo: endpointConfig.developer_wallet,
+      network: network,
+      facilitatorUrl: facilitatorUrl,
+      description: `${endpoint.endpoint_name || 'API endpoint'} - ${endpoint.apis?.api_name || 'ZedKr API'}`,
+    };
+
+    // Sign payment payload
+    const paymentSignature = await signPaymentPayload(paymentPayload, account);
+
+    // Add payment signature to request headers
+    req.headers['payment-signature'] = paymentSignature;
+
+    // Now proceed with proxied request (payment is already signed)
+    // We'll manually create a payment object for logging
+    const payment = {
+      payer: payerAddress,
+      transaction: '', // Will be set after facilitator processes
+      network: network,
+    };
+    (req as any).payment = payment;
+
+    // Proceed to proxy
+    handleProxiedRequest(req, res, endpoint);
+  } catch (error: any) {
+    console.error('Direct payment error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process payment with private key: ' + error.message,
+    });
+  }
+}
 
 /**
  * Handle proxied request after payment verification

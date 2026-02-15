@@ -3,6 +3,7 @@ import { paymentMiddleware, getPayment, STXtoMicroSTX, privateKeyToAccount, wrap
 import { supabase } from '../config/supabase.js';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { updateMonetizedUrlForEndpoint } from '../utils/updateMonetizedUrls.js';
+import axios from 'axios';
 
 const router = express.Router();
 
@@ -122,7 +123,6 @@ async function handleDirectPayment(req: express.Request, res: express.Response, 
   try {
     const network = (process.env.NETWORK || 'testnet') as 'mainnet' | 'testnet';
     const endpointConfig = (req as any).endpointConfig;
-    const axios = require('axios');
 
     // Create account from private key
     const account = privateKeyToAccount(privateKey, network);

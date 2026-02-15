@@ -191,7 +191,9 @@ async function handleDirectPayment(req: express.Request, res: express.Response, 
         amount_paid: endpointConfig.price_microstx,
         status_code: response.status,
         latency_ms: Date.now() - startTime,
-      }).catch((error) => {
+      }).then(() => {
+        // Successfully logged
+      }).catch((error: any) => {
         console.error('Error logging API call:', error);
       });
     }

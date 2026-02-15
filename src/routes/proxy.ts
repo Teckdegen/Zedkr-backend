@@ -184,14 +184,14 @@ async function handleDirectPayment(req: express.Request, res: express.Response, 
     // Log the API call
     if (payment && payment.transaction) {
       const startTime = Date.now();
-      supabase.from('api_calls').insert({
+      Promise.resolve(supabase.from('api_calls').insert({
         endpoint_id: endpointConfig.id,
         caller_wallet: payment.payer,
         tx_hash: payment.transaction,
         amount_paid: endpointConfig.price_microstx,
         status_code: response.status,
         latency_ms: Date.now() - startTime,
-      }).then(() => {
+      })).then(() => {
         // Successfully logged
       }).catch((error: any) => {
         console.error('Error logging API call:', error);
@@ -294,19 +294,18 @@ async function handleProxiedRequest(req: express.Request, res: express.Response,
         // Update API call log with status and latency (async, don't block response)
         if (payment) {
           // Don't await - run in background to avoid blocking response
-          supabase
+          Promise.resolve(supabase
             .from('api_calls')
             .update({
               status_code: proxyRes.statusCode,
               latency_ms: latency,
             })
             .eq('tx_hash', payment.transaction)
-            .then(() => {
-              // Successfully updated
-            })
-            .catch((error: any) => {
-              console.error('Error updating API call log:', error);
-            });
+          ).then(() => {
+            // Successfully updated
+          }).catch((error: any) => {
+            console.error('Error updating API call log:', error);
+          });
         }
       },
       onError: (err, req, res) => {
